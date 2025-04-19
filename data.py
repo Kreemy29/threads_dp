@@ -20,7 +20,20 @@ def load_captions():
     if os.path.exists(baity_path):
         with open(baity_path, 'r', encoding='utf-8') as f:
             reader = csv.reader(f)
-            baity_captions = [row[0] for row in reader if row]
+            # Skip header row if it exists
+            header_skipped = False
+            for row in reader:
+                if not header_skipped:
+                    # Check if this is the header row (typically contains "Caption")
+                    if row and row[0].lower() == "caption":
+                        header_skipped = True
+                        continue
+                    else:
+                        header_skipped = True  # No header, but mark as skipped
+                
+                # Only add non-empty rows
+                if row and row[0].strip():
+                    baity_captions.append(row[0].strip())
     
     # Load opinion captions
     opinion_path = os.path.join(captions_dir, 'opinion_captions.txt')
@@ -28,4 +41,5 @@ def load_captions():
         with open(opinion_path, 'r', encoding='utf-8') as f:
             opinion_captions = [line.strip() for line in f if line.strip()]
     
+    print(f"Loaded {len(baity_captions)} baity captions and {len(opinion_captions)} opinion captions")
     return baity_captions, opinion_captions

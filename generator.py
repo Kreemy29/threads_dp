@@ -1,6 +1,7 @@
 # generator.py
 
 import random
+import os
 from templates import (
     weather_caption_templates, 
     news_caption_templates, 
@@ -13,9 +14,10 @@ from fetchers import fetch_weather, fetch_news_rss, fetch_ticketmaster_event
 def generate_baity_prompt(location: str) -> str:
     """
     Generate a single baity caption that is either:
-    1. Weather-related (20% chance)
-    2. News-related (20% chance)
-    3. A generic baity caption without location specifics (60% chance)
+    1. Weather-related (15% chance)
+    2. News-related (15% chance)
+    3. Location-based caption (30% chance)
+    4. A generic baity caption without location specifics (40% chance)
     
     Note: This function should return exactly ONE caption.
     """
@@ -23,47 +25,110 @@ def generate_baity_prompt(location: str) -> str:
     from data import load_captions
     reference_captions, _ = load_captions()
     
+    # Always have a fallback caption ready
+    fallback_captions = [
+        "Living my best life ✨",
+        "Ready for whatever comes next",
+        "Some days just hit different",
+        "The vibe today is immaculate",
+        "Too busy being awesome",
+        "Just here making memories"
+    ]
+    
+    # Make sure we have some captions to work with
+    if not reference_captions:
+        print("Warning: No reference captions found, using fallbacks")
+        return random.choice(fallback_captions)
+    
+    # Load location-specific captions if the file exists
+    location_captions = []
+    location_path = os.path.join(os.path.dirname(__file__), 'data', 'location_captions.txt')
+    if os.path.exists(location_path):
+        with open(location_path, 'r', encoding='utf-8') as f:
+            location_captions = [line.strip() for line in f if line.strip()]
+    
     # Decide which type of caption to generate
     caption_type = random.choices(
-        ["weather", "news", "generic"], 
-        weights=[20, 20, 60],
+        ["weather", "news", "location", "generic"], 
+        weights=[15, 15, 30, 40],
         k=1
     )[0]
     
+    # Weather caption - only try if city_name is not None
     if caption_type == "weather":
-        # Weather-related caption
         try:
             weather_condition, city_name, state_name = fetch_weather(location)
-            if city_name and state_name:
-                return random.choice(weather_caption_templates).format(
+            if city_name and state_name and weather_condition:
+                weather_caption = random.choice(weather_caption_templates).format(
                     weather_condition=weather_condition,
                     city_name=city_name
                 )
-        except Exception:
-            # Fall back to generic if weather fetch fails
-            caption_type = "generic"
+                print(f"Generated weather caption: {weather_caption}")
+                return weather_caption
+            else:
+                print("Weather caption generation failed: Missing city or weather data")
+        except Exception as e:
+            print(f"Weather caption error: {str(e)}")
+        # Fall back to reference caption if weather fails
+        caption_type = "reference"
     
+    # News caption - only try if news_summary is not None
     if caption_type == "news":
-        # News-related caption
         try:
             news_summary = fetch_news_rss(location)
-            return random.choice(news_caption_templates).format(news_summary=news_summary)
-        except Exception:
-            # Fall back to generic if news fetch fails
-            caption_type = "generic"
+            if news_summary:
+                news_caption = random.choice(news_caption_templates).format(news_summary=news_summary)
+                print(f"Generated news caption: {news_caption}")
+                return news_caption
+            else:
+                print("News caption generation failed: No news summary")
+        except Exception as e:
+            print(f"News caption error: {str(e)}")
+        # Fall back to reference caption if news fails
+        caption_type = "reference"
+            
+    # Location caption - only try if we have location captions
+    if caption_type == "location" and location_captions:
+        try:
+            location_caption = random.choice(location_captions)
+            # Replace {city_name} placeholder if present
+            if "{city_name}" in location_caption:
+                location_caption = location_caption.replace("{city_name}", location)
+            print(f"Generated location caption: {location_caption}")
+            return location_caption
+        except Exception as e:
+            print(f"Location caption error: {str(e)}")
+        # Fall back to reference caption if location fails
+        caption_type = "reference"
     
-    # Generic caption (no location specifics)
-    # Filter out only captions that don't contain placeholders
-    generic_captions = [
-        cap for cap in reference_captions 
-        if "{" not in cap and "}" not in cap
-    ]
+    # Try generic caption (without placeholders)
+    if caption_type == "generic":
+        generic_captions = [
+            cap for cap in reference_captions 
+            if "{" not in cap and "}" not in cap
+        ]
+        
+        if generic_captions:
+            generic_caption = random.choice(generic_captions)
+            print(f"Generated generic caption: {generic_caption}")
+            return generic_caption
     
-    if generic_captions:
-        return random.choice(generic_captions)
-    else:
-        # Fallback if no suitable generic captions found
-        return "Living my best life ✨"
+    # Always fall back to selecting any reference caption if all else fails
+    # This ensures we always return something
+    if reference_captions:
+        random_caption = random.choice(reference_captions)
+        # Clean any placeholders from the caption
+        if "{" in random_caption and "}" in random_caption:
+            # Simple substitution for common placeholders
+            random_caption = random_caption.replace("{city_name}", location)
+            random_caption = random_caption.replace("{weather_condition}", "amazing")
+            random_caption = random_caption.replace("{news_summary}", "the latest happenings")
+        print(f"Falling back to random reference caption: {random_caption}")
+        return random_caption
+    
+    # Ultimate fallback if everything else fails
+    print("All generation methods failed, using ultimate fallback")
+    return random.choice(fallback_captions)
 
 def generate_opinion_prompt(base_prompt: str, location: str) -> str:
     """Merges user-provided base prompt with a single local news reference."""
