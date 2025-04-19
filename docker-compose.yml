@@ -1,0 +1,14 @@
+version: '3'
+
+services:
+  caption-api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - WEATHER_API_KEY=${WEATHER_API_KEY}
+      - TICKETMASTER_API_KEY=${TICKETMASTER_API_KEY}
+    restart: unless-stopped 
